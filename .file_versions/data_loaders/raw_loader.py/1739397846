@@ -1,0 +1,54 @@
+from mage_ai.settings.repo import get_repo_path
+import pandas as pd
+import snowflake.connector
+import os
+import yaml
+
+# Cargar credenciales desde YAML
+def load_snowflake_credentials():
+    yaml_path = os.path.join(get_repo_path(), 'snowflake.yaml')
+    with open(yaml_path, 'r') as file:
+        config = yaml.safe_load(file)
+    return config['default']
+
+# Establecer conexión con Snowflake utilizando el conector oficial
+def create_snowflake_connection():
+    credentials = load_snowflake_credentials()
+    conn = snowflake.connector.connect(
+        user=credentials['SNOWFLAKE_USER'],
+        password=credentials['SNOWFLAKE_PASSWORD'],
+        account=credentials['SNOWFLAKE_ACCOUNT'],
+        database='INSTACART_DB',
+    )
+    return conn
+
+# BLOQUE 1: Data Loader
+@data_loader
+def load_data(*args, **kwargs):
+    config_path = os.path.join(get_repo_path(), 'snowflake.yaml')
+
+
+    with open(config_path, "r") as file:
+        config = yaml.safe_load(file)
+
+    snowflake_config = config["default"]
+
+    conn = snowflake.connector.connect(
+    user=snowflake_config["SNOWFLAKE_USER"],
+    password=snowflake_config["SNOWFLAKE_PASSWORD"],
+    account=snowflake_config["SNOWFLAKE_ACCOUNT"])
+    tables = ['ORDERS', 'PRODUCTS', 'AISLES', 'DEPARTMENTS', 'USERS']
+    data = {}
+
+    for table in tables:
+        print(f"🔄 Cargando {table} desde Snowflake...")
+        query = f"SELECT * FROM RAW.{table}"
+        
+        # Ejecutar la consulta correctamente con pd.read_sql
+        df = pd.read_sql(query, conn)  
+        data[table] = df
+
+        print(f"✅ Tabla {table} cargada exitosamente.")
+
+    conn.close()  # Cerrar la conexión después de cargar los datos
+    return data

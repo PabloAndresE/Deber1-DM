@@ -1,0 +1,42 @@
+from mage_ai.data_preparation.decorators import data_loader
+import pandas as pd
+from mage_ai.io.config import ConfigFileLoader
+from mage_ai.io.snowflake import Snowflake
+from os import path
+
+# Cargar credenciales desde YAML
+def load_snowflake_credentials():
+    yaml_path = path.join(get_repo_path(), 'back', 'snowflake.yaml')
+    with open(yaml_path, 'r') as file:
+        config = yaml.safe_load(file)
+    return config['default']
+
+# Establecer conexión con Snowflake utilizando la clase Snowflake de Mage AI
+def create_snowflake_connection():
+    credentials = load_snowflake_credentials()
+    config_path = path.join(get_repo_path(), 'snowflake.yaml')
+    config_profile = 'default'
+    snowflake_loader = Snowflake.with_config(ConfigFileLoader(config_path, config_profile))
+
+    return snowflake_loader
+
+# BLOQUE 1: Data Loader
+@data_loader
+def load_data(*args, **kwargs):
+    snowflake_loader = create_snowflake_connection()
+
+    # Definir las tablas que se van a cargar desde Snowflake
+    tables = ['ORDERS', 'PRODUCTS', 'AISLES', 'DEPARTMENTS', 'USERS']
+    data = {}
+
+    for table in tables:
+        print(f"🔄 Cargando {table} desde Snowflake...")
+        query = f"SELECT * FROM RAW.{table}"
+        
+        # Cargar los datos de cada tabla a un DataFrame
+        df = snowflake_loader.query(query)
+        data[table] = df
+
+        print(f"Tabla {table} cargada exitosamente.")
+
+    return data

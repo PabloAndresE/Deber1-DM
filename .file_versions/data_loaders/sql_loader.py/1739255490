@@ -1,0 +1,12 @@
+import mage_ai.data_preparation.variable_manager as variable_manager
+import pandas as pd
+from mage_ai.io.mysql import MySQL
+
+# Conectar y leer datos
+with MySQL() as loader:
+    df = loader.load(
+        query="SELECT * FROM orders LIMIT 10",  # Cambia la consulta según necesites
+        database="mydatabase"
+    )
+
+print(df.head())  # Verifica los datos

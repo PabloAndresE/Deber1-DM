@@ -1,0 +1,5 @@
+version: 0.1.1
+default:
+  SNOWFLAKE_USER: "Pablo"         
+  SNOWFLAKE_PASSWORD: "hwship17TRN312" 
+  SNOWFLAKE_ACCOUNT: "xqb21060.us-east-1" 

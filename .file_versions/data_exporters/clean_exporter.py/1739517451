@@ -1,0 +1,126 @@
+import snowflake.connector
+import pandas as pd
+import os
+import yaml
+
+def load_snowflake_credentials(yaml_path):
+    with open(yaml_path, 'r') as file:
+        config = yaml.safe_load(file)
+
+    if 'default' not in config:
+        raise KeyError("Missing 'default' key in YAML file. Check the structure.")
+
+    return {
+        'user': config['default']['SNOWFLAKE_USER'],
+        'password': config['default']['SNOWFLAKE_PASSWORD'],
+        'account': config['default']['SNOWFLAKE_ACCOUNT']
+    }
+
+def create_snowflake_connection(credentials):
+    conn = snowflake.connector.connect(
+        user=credentials['user'],
+        password=credentials['password'],
+        account=credentials['account'],
+        database="INSTACART_DB",
+        schema="CLEAN"
+    )
+    return conn
+
+@data_exporter
+def export_clean_data(transformed_data, *args, **kwargs):
+    """
+    Export transformed data to Snowflake without using SQLAlchemy.
+    """
+    yaml_path = os.path.join(os.getcwd(), 'snowflake.yaml')  # Adjust path if needed
+    credentials = load_snowflake_credentials(yaml_path)
+    conn = create_snowflake_connection(credentials)
+    cursor = conn.cursor()
+    cursor.execute("USE DATABASE INSTACART_DB;") 
+    cursor.execute("CREATE SCHEMA IF NOT EXISTS CLEAN;") 
+    cursor.execute("USE SCHEMA CLEAN;") 
+    
+    print("✅ Connected to Snowflake.")
+
+    print(data["dim_orders"].head())
+
+
+    # Define table structures
+    table_definitions = {
+        "fact_orders": """
+            CREATE TABLE IF NOT EXISTS fact_orders (
+                order_id INT,
+                product_id INT,
+                orders INT,
+                reordered BOOLEAN
+            )
+        """,
+        "dim_products": """
+            CREATE TABLE IF NOT EXISTS dim_products (
+                product_id INT PRIMARY KEY,
+                product_name STRING,
+                aisle_id INT,
+                department_id INT
+            )
+        """,
+        "dim_departments": """
+            CREATE TABLE IF NOT EXISTS dim_departments (
+                department_id INT PRIMARY KEY,
+                department_name STRING
+            )
+        """,
+        "dim_aisles": """
+            CREATE TABLE IF NOT EXISTS dim_aisles (
+                aisle_id INT PRIMARY KEY,
+                aisle_name STRING
+            )
+        """,
+        "dim_orders": """
+            CREATE TABLE IF NOT EXISTS dim_orders (
+                id INT PRIMARY KEY,
+                order_id INT,
+                user_id INT,
+                order_number INT,
+                order_dow INT,
+                order_hour_of_day INT,
+                days_since_prior_order INT
+            )
+        """,
+        "dim_users": """
+            CREATE TABLE IF NOT EXISTS dim_users (
+                user_id INT PRIMARY KEY
+            )
+        """
+    }
+
+    # Create tables if they don't exist
+    for table, query in table_definitions.items():
+        cursor.execute(query)
+    print("✅ Tables checked/created.")
+
+    # Upload data
+    for table_name, df in data.items():
+        print(f"📤 Uploading {table_name} to Snowflake...")
+
+        # Write DataFrame to a CSV file
+        temp_csv = f"/tmp/{table_name}.csv"
+        df.to_csv(temp_csv, index=False, header=True)
+
+        # Upload CSV to Snowflake stage
+        cursor.execute(f"PUT file://{temp_csv} @%{table_name}")
+        cursor.execute(f"COPY INTO {table_name} FROM @%{table_name} FILE_FORMAT = (TYPE=CSV SKIP_HEADER=1)")
+        os.remove(temp_csv)
+
+    print("🚀 Data upload completed.")
+
+    cursor.close()
+    conn.close()
+
+    print(data.keys())
+
+    print("Número de registros antes y después de la limpieza:")
+    print(f"Ordenes originales: {len(data['ORDERS'])} → Limpias: {len(transformed_data['dim_orders'])}")
+    print(f"Productos originales: {len(data['PRODUCTS'])} → Limpios: {len(transformed_data['dim_products'])}")
+    print(f"Departamentos originales: {len(data['DEPARTMENTS'])} → Limpios: {len(transformed_data['dim_departments'])}")
+    print(f"Aisles originales: {len(data['AISLES'])} → Limpios: {len(transformed_data['dim_aisles'])}")
+    print(f"Fact Orders originales: {len(data['ORDER_PRODUCTS'])} → Limpios: {len(transformed_data['fact_orders'])}")
+

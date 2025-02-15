@@ -1,0 +1,48 @@
+import from mage_ai.data_preparation.decorators import data_loader, transformer, data_exporter
+import pandas as pd
+import snowflake.connector
+import os
+import yaml
+
+# Cargar credenciales desde YAML
+def load_snowflake_credentials():
+    yaml_path = os.path.join(os.getcwd(), 'back', 'snowflake.yaml')
+    with open(yaml_path, 'r') as file:
+        config = yaml.safe_load(file)
+    return config['default']
+
+# Establecer conexión con Snowflake
+def create_snowflake_connection():
+    credentials = load_snowflake_credentials()
+    conn = snowflake.connector.connect(
+        user=credentials['SNOWFLAKE_USER'],
+        password=credentials['SNOWFLAKE_PASSWORD'],
+        account=credentials['SNOWFLAKE_ACCOUNT'],
+        warehouse='COMPUTE_WH',
+        database='INSTACART_DB',
+        schema='RAW'
+    )
+    return conn
+
+@data_loader
+def load_data_from_snowflake(*args, **kwargs):
+    """
+    Template for loading data from a Snowflake warehouse.
+    Specify your configuration settings in 'io_config.yaml'.
+
+    Docs: https://docs.mage.ai/design/data-loading#example-loading-data-from-snowflake-warehouse
+    """
+    query = 'your_snowflake_query'
+    config_path = path.join(get_repo_path(), 'io_config.yaml')
+    config_profile = 'default'
+
+    with Snowflake.with_config(ConfigFileLoader(config_path, config_profile)) as loader:
+        return loader.load(query)
+
+
+@test
+def test_output(output, *args) -> None:
+    """
+    Template code for testing the output of the block.
+    """
+    assert output is not None, 'The output is undefined'

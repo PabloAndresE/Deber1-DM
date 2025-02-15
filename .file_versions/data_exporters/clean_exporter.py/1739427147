@@ -1,0 +1,118 @@
+import pandas as pd
+import snowflake.connector
+from sqlalchemy import create_engine
+from mage_ai.data_preparation.decorators import data_exporter
+
+# Parámetros de conexión (deben estar en variables de entorno para mayor seguridad)
+SNOWFLAKE_USER = "tu_usuario"
+SNOWFLAKE_PASSWORD = "tu_contraseña"
+SNOWFLAKE_ACCOUNT = "tu_cuenta"  # Ejemplo: xqb21060.us-east-1
+WAREHOUSE = "COMPUTE_WH"
+DATABASE = "CLEAN"
+SCHEMA = "PUBLIC"
+
+# Crear conexión a Snowflake
+def get_snowflake_connection():
+    return snowflake.connector.connect(
+        user=SNOWFLAKE_USER,
+        password=SNOWFLAKE_PASSWORD,
+        account=SNOWFLAKE_ACCOUNT,
+        warehouse=WAREHOUSE
+    )
+
+# Crear engine SQLAlchemy para `to_sql()`
+def get_engine():
+    return create_engine(
+        f"snowflake://{SNOWFLAKE_USER}:{SNOWFLAKE_PASSWORD}@{SNOWFLAKE_ACCOUNT}/{DATABASE}/{SCHEMA}?warehouse={WAREHOUSE}"
+    )
+
+@data_exporter
+def export_clean_data(data, *args, **kwargs):
+    """
+    Exporta los datos limpios a Snowflake en la base de datos 'CLEAN'.
+    """
+
+    conn = get_snowflake_connection()
+    cursor = conn.cursor()
+
+    # --- 1. Crear base de datos y esquema si no existen ---
+    cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DATABASE}")
+    cursor.execute(f"USE DATABASE {DATABASE}")
+    cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}")
+    cursor.execute(f"USE SCHEMA {SCHEMA}")
+
+    print("✅ Base de datos y esquema listos en Snowflake.")
+
+    # --- 2. Definir estructura de las tablas ---
+    table_definitions = {
+        "fact_orders": """
+            CREATE TABLE IF NOT EXISTS fact_orders (
+                order_id INT,
+                product_id INT,
+                order INT,
+                reordered BOOLEAN,
+                days_since_prior_order FLOAT
+            )
+        """,
+        "dim_products": """
+            CREATE TABLE IF NOT EXISTS dim_products (
+                product_id INT PRIMARY KEY,
+                product_name STRING,
+                aisle_id INT,
+                department_id INT
+            )
+        """,
+        "dim_departments": """
+            CREATE TABLE IF NOT EXISTS dim_departments (
+                department_id INT PRIMARY KEY,
+                department_name STRING
+            )
+        """,
+        "dim_aisles": """
+            CREATE TABLE IF NOT EXISTS dim_aisles (
+                aisle_id INT PRIMARY KEY,
+                aisle_name STRING
+            )
+        """,
+        "dim_orders": """
+            CREATE TABLE IF NOT EXISTS dim_orders (
+                order_id INT PRIMARY KEY,
+                user_id INT,
+                eval_set STRING,
+                order_number INT,
+                order_dow INT,
+                order_hour_of_day INT
+            )
+        """,
+        "dim_users": """
+            CREATE TABLE IF NOT EXISTS dim_users (
+                user_id INT PRIMARY KEY
+            )
+        """
+    }
+
+    # Ejecutar las creaciones de tablas
+    for table, query in table_definitions.items():
+        cursor.execute(query)
+
+    print("✅ Tablas creadas/verificadas en Snowflake.")
+
+    # --- 3. Cargar los datos transformados ---
+    engine = get_engine()
+
+    for table_name, df in data.items():
+        print(f"📤 Cargando {table_name} en Snowflake...")
+
+        df.to_sql(
+            table_name,
+            engine,
+            index=False,
+            if_exists="replace",  # Opción: "append" si no quieres reemplazar
+            chunksize=50_000
+        )
+
+    print("🚀 Carga de datos completada en Snowflake.")
+
+    # Cerrar conexiones
+    cursor.close()
+    conn.close()

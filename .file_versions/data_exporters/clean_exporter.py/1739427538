@@ -1,0 +1,133 @@
+import pandas as pd
+import os
+import snowflake.connector
+from sqlalchemy import create_engine
+from mage_ai.data_preparation.decorators import data_exporter
+
+def load_snowflake_credentials(yaml_path):
+    with open(yaml_path, 'r') as file:
+        config = yaml.safe_load(file)
+
+    if 'default' not in config:
+        raise KeyError("❌ Missing 'default' key in YAML file. Check the structure.")
+
+    return {
+        'user': config['default']['SNOWFLAKE_USER'],
+        'password': config['default']['SNOWFLAKE_PASSWORD'],
+        'account': config['default']['SNOWFLAKE_ACCOUNT']
+    }
+
+# Path to the config.yaml file (one directory level up from the script)
+yaml_path = os.path.join(os.getcwd(), '..', 'snowflake.yaml')  
+
+# Load the credentials from the YAML file
+credentials = load_snowflake_credentials(yaml_path)
+
+# Function to create Snowflake connection using the loaded credentials
+def create_snowflake_connection(credentials):
+    conn = snowflake.connector.connect(
+        user=credentials['user'],
+        password=credentials['password'],
+        account=credentials['account'],
+        database="INSTACART_DB",
+        schema="RAW"
+    )
+    return conn
+
+
+# Crear engine SQLAlchemy para `to_sql()`
+def get_engine():
+    return create_engine(
+        f"snowflake://{SNOWFLAKE_USER}:{SNOWFLAKE_PASSWORD}@{SNOWFLAKE_ACCOUNT}/{DATABASE}/{SCHEMA}?warehouse={WAREHOUSE}"
+    )
+
+@data_exporter
+def export_clean_data(data, *args, **kwargs):
+    """
+    Exporta los datos limpios a Snowflake en la base de datos 'CLEAN'.
+    """
+
+    conn = create_snowflake_connection()
+    cursor = conn.cursor()
+
+    # --- 1. Crear base de datos y esquema si no existen ---
+    cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DATABASE}")
+    cursor.execute(f"USE DATABASE {DATABASE}")
+    cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}")
+    cursor.execute(f"USE SCHEMA {SCHEMA}")
+
+    print("✅ Base de datos y esquema listos en Snowflake.")
+
+    # --- 2. Definir estructura de las tablas ---
+    table_definitions = {
+        "fact_orders": """
+            CREATE TABLE IF NOT EXISTS fact_orders (
+                order_id INT,
+                product_id INT,
+                order INT,
+                reordered BOOLEAN,
+                days_since_prior_order FLOAT
+            )
+        """,
+        "dim_products": """
+            CREATE TABLE IF NOT EXISTS dim_products (
+                product_id INT PRIMARY KEY,
+                product_name STRING,
+                aisle_id INT,
+                department_id INT
+            )
+        """,
+        "dim_departments": """
+            CREATE TABLE IF NOT EXISTS dim_departments (
+                department_id INT PRIMARY KEY,
+                department_name STRING
+            )
+        """,
+        "dim_aisles": """
+            CREATE TABLE IF NOT EXISTS dim_aisles (
+                aisle_id INT PRIMARY KEY,
+                aisle_name STRING
+            )
+        """,
+        "dim_orders": """
+            CREATE TABLE IF NOT EXISTS dim_orders (
+                order_id INT PRIMARY KEY,
+                user_id INT,
+                eval_set STRING,
+                order_number INT,
+                order_dow INT,
+                order_hour_of_day INT
+            )
+        """,
+        "dim_users": """
+            CREATE TABLE IF NOT EXISTS dim_users (
+                user_id INT PRIMARY KEY
+            )
+        """
+    }
+
+    # Ejecutar las creaciones de tablas
+    for table, query in table_definitions.items():
+        cursor.execute(query)
+
+    print("✅ Tablas creadas/verificadas en Snowflake.")
+
+    # --- 3. Cargar los datos transformados ---
+    engine = get_engine()
+
+    for table_name, df in data.items():
+        print(f"📤 Cargando {table_name} en Snowflake...")
+
+        df.to_sql(
+            table_name,
+            engine,
+            index=False,
+            if_exists="replace",  # Opción: "append" si no quieres reemplazar
+            chunksize=50_000
+        )
+
+    print("🚀 Carga de datos completada en Snowflake.")
+
+    # Cerrar conexiones
+    cursor.close()
+    conn.close()

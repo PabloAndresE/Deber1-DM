@@ -1,0 +1,59 @@
+import snowflake.connector
+
+import pandas as pd
+import os
+import yaml
+import snowflake.connector
+from mage_ai.settings.repo import get_repo_path
+import sqlalchemy
+from snowflake.sqlalchemy import URL
+def load_snowflake_credentials(yaml_path):
+    with open(yaml_path, 'r') as file:
+        config = yaml.safe_load(file)
+
+    if 'default' not in config:
+        raise KeyError("Missing 'default' key in YAML file. Check the structure.")
+
+    return {
+        'user': config['default']['SNOWFLAKE_USER'],
+        'password': config['default']['SNOWFLAKE_PASSWORD'],
+        'account': config['default']['SNOWFLAKE_ACCOUNT']
+    }
+
+# Path to the config.yaml file (one directory level up from the script)
+yaml_path = os.path.join(get_repo_path(), 'snowflake.yaml') 
+
+# Load the credentials from the YAML file
+
+
+# Function to create Snowflake connection using the loaded credentials
+def create_snowflake_connection(credentials):
+    conn = snowflake.connector.connect(
+        user=credentials['user'],
+        password=credentials['password'],
+        account=credentials['account'],
+        database="INSTACART_DB",
+        schema="RAW"
+    )
+    return conn
+
+credentials = load_snowflake_credentials(yaml_path)
+conn = create_snowflake_connection(credentials)
+cursor = conn.cursor()
+
+print(transformed_data.keys())
+# Your DataFrame
+
+# Convert DataFrame to list of tuples
+records = list(transformed_data.itertuples(index=False, name=None))
+
+# Insert data into Snowflake
+cursor.executemany(
+    "INSERT INTO fact_orders (order_id, product_id, orders) VALUES (%s, %s, %s)", 
+    records
+)
+
+conn.commit()
+cursor.close()
+conn.close()
+print("✅ Data uploaded successfully using Snowflake Connector!")

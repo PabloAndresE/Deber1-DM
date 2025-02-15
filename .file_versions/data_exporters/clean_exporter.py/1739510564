@@ -1,0 +1,39 @@
+import snowflake.connector
+
+# Snowflake credentials
+credentials = {
+    "user": "your_username",
+    "password": "your_password",
+    "account": "your_account"
+}
+
+# Create Snowflake connection
+conn = snowflake.connector.connect(
+    user=credentials["user"],
+    password=credentials["password"],
+    account=credentials["account"],
+    database="INSTACART_DB",
+    schema="CLEAN"
+)
+cursor = conn.cursor()
+
+# Your DataFrame
+df = pd.DataFrame({
+    "order_id": [1, 2, 3],
+    "product_id": [101, 102, 103],
+    "orders": [1, 2, 1]
+})
+
+# Convert DataFrame to list of tuples
+records = list(df.itertuples(index=False, name=None))
+
+# Insert data into Snowflake
+cursor.executemany(
+    "INSERT INTO fact_orders (order_id, product_id, orders) VALUES (%s, %s, %s)", 
+    records
+)
+
+conn.commit()
+cursor.close()
+conn.close()
+print("✅ Data uploaded successfully using Snowflake Connector!")

@@ -1,0 +1,32 @@
+from mage_ai.settings.repo import get_repo_path
+from mage_ai.io.config import ConfigFileLoader
+from mage_ai.io.snowflake import Snowflake
+from os import path
+
+if 'data_exporter' not in globals():
+    from mage_ai.data_preparation.decorators import data_exporter
+
+@data_exporter
+def export_data_to_snowflake(*args, **kwargs):
+    """
+    Exporta los datos a Snowflake.
+    Define la consulta o los datos a exportar hacia Snowflake aquí.
+    """
+
+    # Puedes usar datos generados en un bloque anterior o cargar tus datos de cualquier otra fuente.
+    data_to_export = kwargs.get('data')  # Asumiendo que pasamos un dataframe o lista de diccionarios
+
+    # Especificamos la tabla en la que vamos a insertar los datos
+    table_name = 'your_table_name'
+
+    # Definir la configuración de Snowflake
+    config_path = path.join(get_repo_path(), 'snowflake.yaml')  # Ruta del archivo de configuración
+    config_profile = 'default'
+
+    # Conectar a Snowflake usando la configuración
+    with Snowflake.with_config(ConfigFileLoader(config_path, config_profile)) as exporter:
+        # Insertar los datos en la tabla de Snowflake
+        exporter.insert(table_name, data_to_export)
+
+    print(f"Datos exportados a la tabla {table_name} en Snowflake.")
+

@@ -1,0 +1,45 @@
+from mage_ai.settings.repo import get_repo_path
+from mage_ai.io.config import ConfigFileLoader
+from mage_ai.io.snowflake import Snowflake
+from os import path
+if 'data_loader' not in globals():
+    from mage_ai.data_preparation.decorators import data_loader
+if 'test' not in globals():
+    from mage_ai.data_preparation.decorators import test
+
+def load_snowflake_credentials():
+    yaml_path = os.path.join(os.getcwd(), 'back', 'snowflake.yaml')
+    with open(yaml_path, 'r') as file:
+        config = yaml.safe_load(file)
+    return config['default']
+    
+def create_snowflake_connection():
+    credentials = load_snowflake_credentials()
+    conn = snowflake.connector.connect(
+        user=credentials['SNOWFLAKE_USER'],
+        password=credentials['SNOWFLAKE_PASSWORD'],
+        account=credentials['SNOWFLAKE_ACCOUNT'],
+        warehouse='COMPUTE_WH',
+        database='INSTACART_DB',
+        schema='RAW'
+    )
+    return conn
+
+@data_loader
+def load_data_from_snowflake(*args, **kwargs):
+    conn = create_snowflake_connection()
+    tables = ['ORDERS', 'PRODUCTS', 'AISLES', 'DEPARTMENTS', 'USERS']
+    data = {}
+    for table in tables:
+        query = f"SELECT * FROM RAW.{table}"
+        data[table] = pd.read_sql(query, conn)
+    conn.close()
+    return data
+
+
+@test
+def test_output(output, *args) -> None:
+    """
+    Template code for testing the output of the block.
+    """
+    assert output is not None, 'The output is undefined'

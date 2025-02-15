@@ -1,0 +1,7 @@
+version: 0.1.1
+default:
+  MYSQL_DATABASE: "instacart_db"
+  MYSQL_HOST: "localhost"
+  MYSQL_USER: "root"
+  MYSQL_PASSWORD: "hwship17TRN312"
+  MYSQL_PORT: 3306 
